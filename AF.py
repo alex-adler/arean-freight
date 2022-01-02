@@ -11,6 +11,7 @@ rho = 0.02  # Density kg/m3
 a = 240  # Speed of sound m/s
 g = 3.721   # Gravity m/s2
 gamma = 1.31  # Adiabatic gas constant
+surface_pressure = 610
 
 # Shock Table
 beta_max = 60
@@ -34,12 +35,12 @@ def LinearSupersonic(M):
 
 
 def Ackeret(theta_deg, M):
-    return 2 * theta_deg/np.sqrt(M**2-1)
+    return 2 * np.radians(theta_deg)/np.sqrt(M**2-1)
 
 
 def SupersonicFlatPlate(alpha, M):
     # Sectional lift coeff, Sectional wave drag coeff
-    return (4 * alpha/np.sqrt(M**2-1), 4 * alpha**2/np.sqrt(M**2-1))
+    return (4 * np.radians(alpha)/np.sqrt(M**2-1), 4 * np.radians(alpha)**2/np.sqrt(M**2-1))
 
 
 def PlotFuelWeightISP(F_N, flight_time_s):
@@ -82,7 +83,7 @@ def GetObliqueShockAngle(M, theta_deg, gamma, beta_max=90, beta_step=.1):
         else:
             return np.interp(theta_deg, [theta_left, value[1]], [beta_left, value[0]])
 
-    print("End of the line")
+    print("Normal shock")
     return(90)
 
 
@@ -132,8 +133,9 @@ def GetShockCoords(x1, y1, M, theta_deg, wing_m, wing_c, gamma):
 # Draw the plot showing how the wing interacts
 def Draw(h, alpha, M, gamma):
 
+    M_inf = M
+
     fig, ax = plt.subplots()
-    plt.title(f"Wing section at alpha = {alpha}, M = {M}, and h = {h} c")
 
     # Draw wing
     wing = GetWingCoords(h, alpha)
@@ -144,17 +146,61 @@ def Draw(h, alpha, M, gamma):
     x = wing[0][0]
     y = wing[1][0]
 
+    pressure_ratio = [(x, y, 1)]
+
     # Loop until flow is no longer supersonic or it has reached the end of the wing
     while M > 1:
         shock = GetShockCoords(x, y, M, alpha, wing_m, wing_c, gamma)
         ax.plot(shock[0], shock[1])
-        M = shock[2][0]
         x = shock[0][1]
         y = shock[1][1]
+        M = shock[2][0]
+        if y != 0:
+            pressure_ratio.append((x, y, shock[2][2]))
+        else:
+            pressure_ratio.append((-1, -1, shock[2][2]))
         print(f"Mach Number is now {M}")
         if x > 1 and y != 0:
             break
 
+    # Calculate lift and drag
+    x_last = pressure_ratio[0][0]
+    y_last = pressure_ratio[0][1]
+    current_pressure = 1
+    lift = 0
+    drag = 0
+    for p in pressure_ratio:
+        if p[0] != -1:
+            x = p[0]
+            y = p[1]
+            if x > 1:
+                x = 1
+                y = h
+
+            lift += (x-x_last) * current_pressure
+            drag += (y_last-y) * current_pressure
+
+            x_last = x
+            y_last = y
+        current_pressure *= p[2]
+
+    # Upper surface
+    c_p_u = Ackeret(-alpha, M_inf)
+
+    c_l = lift/(0.5*gamma*M_inf**2) - \
+        c_p_u*np.cos(np.radians(alpha))
+    c_d = drag/(0.5*gamma*M_inf**2) - \
+        c_p_u*np.sin(np.radians(alpha))
+
+    unbounded = SupersonicFlatPlate(alpha, M_inf)
+
+    print(f"Lift Coefficient = {c_l:.4f}, Wave Drag Coefficient = {c_d:.4f}")
+    print(f"Unbounded flow c_l= {unbounded[0]:.4f}, c_d = {unbounded[1]:.4f}")
+    print(
+        f"Gound effect increases c_l by factor of {c_l/unbounded[0]:.2f} and c_d by a factor {c_d/unbounded[1]:.2f}")
+
+    # Plot formatting
+    plt.title(f"Wing section at alpha = {alpha}, M = {M_inf}, and h = {h} c")
     plt.ylabel(r"$\frac{y}{c}$")
     plt.xlabel(r"$\frac{x}{c}$")
     plt.xlim([-.5, 1.5])
@@ -186,9 +232,7 @@ W_F_N = (F_N/(g0*Isp_s))*flight_time_s*g
 MTOW_N = W_PL_N + W_C_N+W_F_N
 MTOW_N *= 1+We_Wto
 
-print(f"MTOW = {MTOW_N:.4} N, Payload Weight = {W_PL_N:.4} N, Fuel Weight = {W_F_N:.4} N ({W_F_N/(1000*g):.4} tonnes), Total Mass = {MTOW_N/(1000*g):.4} tonnes")
+# print(f"MTOW = {MTOW_N:.4} N, Payload Weight = {W_PL_N:.4} N, Fuel Weight = {W_F_N:.4} N ({W_F_N/(1000*g):.4} tonnes), Total Mass = {MTOW_N/(1000*g):.4} tonnes")
 
-print(f"M = {calc_V(MTOW_N, rho, 0.1, 1000)/a:.4}")
-print(f"C_L = {calc_CL(MTOW_N, rho, 4*a, 1000):.4}")
-
-print(np.degrees(Oblique(np.radians(16.0965164), 4, 1.31)))
+# print(f"M = {calc_V(MTOW_N, rho, 0.1, 1000)/a:.4}")
+# print(f"C_L = {calc_CL(MTOW_N, rho, 4*a, 1000):.4}")
