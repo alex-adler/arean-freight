@@ -2,6 +2,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import math
+from pyatmos import coesa76
 
 # Globals
 g0 = 9.81  # Standard gravity
@@ -24,6 +25,34 @@ def calc_CL(L, rho, V, S):
 
 def calc_V(L, rho, C_L, S):
     return ((2*L)/(rho*C_L*S))**.5
+
+
+def DesignVehicle():
+    # Design requirements
+    range_km = 10000
+    payload_kg = 30000
+
+    # Engine properties (nuclear thermal)
+    Isp_s = 800
+    F_N = 250000
+
+    # Estimated properties
+    flight_time_s = 5000
+    We_Wto = 0.5  # Empty weight fraction
+    cruise_alpha_rad = np.radians(2.5)
+
+    # Vehicle properties
+    # Weight
+    W_PL_N = payload_kg * g   # Payload weight
+    W_C_N = 0  # Crew Weight
+    W_F_N = (F_N/(g0*Isp_s))*flight_time_s*g
+    MTOW_N = W_PL_N + W_C_N+W_F_N
+    MTOW_N *= 1+We_Wto
+
+    print(f"MTOW = {MTOW_N:.4} N, Payload Weight = {W_PL_N:.4} N, Fuel Weight = {W_F_N:.4} N ({W_F_N/(1000*g):.4} tonnes), Total Mass = {MTOW_N/(1000*g):.4} tonnes")
+
+    print(f"M = {calc_V(MTOW_N, rho, 0.1, 1000)/a:.4}")
+    print(f"C_L = {calc_CL(MTOW_N, rho, 4*a, 1000):.4}")
 
 
 def PG(M):
@@ -131,7 +160,7 @@ def GetShockCoords(x1, y1, M, theta_deg, wing_m, wing_c, gamma):
 
 
 # Draw the plot showing how the wing interacts
-def Draw(h, alpha, M, gamma):
+def DrawSupersonicWing(h, alpha, M, gamma):
 
     M_inf = M
 
@@ -179,6 +208,8 @@ def Draw(h, alpha, M, gamma):
 
             lift += (x-x_last) * current_pressure
             drag += (y_last-y) * current_pressure
+            # print(
+            #     f"Adding {((x-x_last) * current_pressure)/(0.5*gamma*M_inf**2)} of lift coeff")
 
             x_last = x
             y_last = y
@@ -208,31 +239,64 @@ def Draw(h, alpha, M, gamma):
     plt.show()
 
 
-Draw(.1, 2.5, 4, gamma)
+# Plot altitude vs pressure for Earth and Mars atmospheres
+def Atmosphere():
+    # plt.figure(figsize=(4.5, 8))
+    fig, ax = plt.subplots(figsize=(4.5, 8))
 
-# Design requirements
-range_km = 10000
-payload_kg = 30000
+    # Earth atmosphere
+    h = np.linspace(0, 100, 100)
+    atmo = coesa76(h)
+    ax.plot(atmo.P/1000, h, c='royalblue')
+    plt.xlim([0, atmo.P[0]/1000])
 
-# Engine properties (nuclear thermal)
-Isp_s = 800
-F_N = 250000
+    # Mars Atmosphere
+    h_mars = np.linspace(0, 100, 100)
+    p_mars = .699*np.exp(-.00009*h_mars*1000)
+    ax.plot(p_mars, h_mars, c="coral")
+    plt.ylim([0, 100])
+    # plt.ylabel("Altitude (km)")
+    # plt.xlabel("Pressure (kPa)")
+    ax.set_xlabel('Pressure (kPa)')
+    ax.set_ylabel('Altitude (km)')
 
-# Estimated properties
-flight_time_s = 5000
-We_Wto = 0.5  # Empty weight fraction
-cruise_alpha_rad = np.radians(2.5)
+    fig.tight_layout()
+    plt.savefig("./big_atmo.svg", transparent=True, bbox_inches='tight')
 
 
-# Vehicle properties
-# Weight
-W_PL_N = payload_kg * g   # Payload weight
-W_C_N = 0  # Crew Weight
-W_F_N = (F_N/(g0*Isp_s))*flight_time_s*g
-MTOW_N = W_PL_N + W_C_N+W_F_N
-MTOW_N *= 1+We_Wto
+# Plot Mars pressure at Earth equivalent altitude
+def AtmosphereZoomedIn():
+    # Earth atmosphere
+    h = np.linspace(0, 100, 100)
+    atmo = coesa76(h)
 
-# print(f"MTOW = {MTOW_N:.4} N, Payload Weight = {W_PL_N:.4} N, Fuel Weight = {W_F_N:.4} N ({W_F_N/(1000*g):.4} tonnes), Total Mass = {MTOW_N/(1000*g):.4} tonnes")
+    # Mars Atmosphere
+    h_mars = np.linspace(0, 100, 100)
+    p_mars = .699*np.exp(-.00009*h_mars*1000)
 
-# print(f"M = {calc_V(MTOW_N, rho, 0.1, 1000)/a:.4}")
-# print(f"C_L = {calc_CL(MTOW_N, rho, 4*a, 1000):.4}")
+    fig, ax1 = plt.subplots(figsize=(4.5, 8))
+    # Earth
+    color = 'royalblue'
+    ax1.set_xlabel('Pressure (kPa)')
+    ax1.set_ylabel('Earth Altitude (km)', color=color)
+    ax1.plot(atmo.P/1000, h, color=color)
+    ax1.tick_params(axis='y', labelcolor=color)
+    ax1.set_ylim([34, 100])
+
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+    # Mars
+    color = 'coral'
+    ax2.set_ylabel('Mars Altitude (km)', color=color)
+    ax2.plot(p_mars, h_mars, color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    plt.xlim([0, .7])
+    plt.ylim([0, 100])
+    fig.tight_layout()
+    plt.savefig("./small_atmo.svg", transparent=True, bbox_inches='tight')
+
+
+# DesignVehicle()
+# DrawSupersonicWing(.1, 2.5, 4, gamma)
+Atmosphere()
+AtmosphereZoomedIn()
