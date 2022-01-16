@@ -69,14 +69,6 @@ def Ackeret(theta_deg, M):
     return 2 * np.radians(theta_deg) / np.sqrt(M ** 2 - 1)
 
 
-def SupersonicFlatPlate(alpha, M):
-    # Sectional lift coeff, Sectional wave drag coeff
-    return (
-        4 * np.radians(alpha) / np.sqrt(M ** 2 - 1),
-        4 * np.radians(alpha) ** 2 / np.sqrt(M ** 2 - 1),
-    )
-
-
 def PlotFuelWeightISP(F_N, flight_time_s):
     # Test Values
     Isp = np.linspace(500, 1000, 100)
@@ -231,6 +223,24 @@ def CalcExpansion(M1, theta_rad, gamma):
     return (M2, T2_T1, p2_p1, rho2_rho1)
 
 
+def SupersonicFlatPlate(M, alpha_deg, gamma):
+    alpha_rad = np.radians(alpha_deg)
+    # Lower surface
+    shock = CalcObliqueShock(M, alpha_deg, gamma)
+    expansion = CalcExpansion(M, alpha_rad, gamma)
+
+    normal = shock[2] - expansion[2]
+
+    lift = normal * np.cos(alpha_rad)
+    drag = normal * np.sin(alpha_rad)
+
+    # Non-dimensionalise
+    c_l = lift / (0.5 * gamma * M**2)
+    c_d = drag / (0.5 * gamma * M**2)
+
+    return (c_l, c_d)
+
+
 # Draw the plot showing how the wing interacts
 def DrawSupersonicWing(M, alpha, h, gamma):
 
@@ -301,7 +311,7 @@ def DrawSupersonicWing(M, alpha, h, gamma):
     c_l = lift / (0.5 * gamma * M_inf**2)
     c_d = drag / (0.5 * gamma * M_inf**2)
 
-    unbounded = SupersonicFlatPlate(alpha, M_inf)
+    unbounded = SupersonicFlatPlate(M_inf, alpha, gamma)
 
     print(f"Lift Coefficient = {c_l:.4f}, Wave Drag Coefficient = {c_d:.4f}")
     print(f"Unbounded flow c_l= {unbounded[0]:.4f}, c_d = {unbounded[1]:.4f}")
