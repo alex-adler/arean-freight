@@ -140,8 +140,8 @@ def CalcObliqueShock(M1, theta_deg, gamma):
     T2_T1 = ((2 * gamma * M1n2 - (gamma - 1)) * ((gamma - 1) * M1n2 + 2)) / (
         (gamma + 1) ** 2 * M1n2
     )
-    p02_p01 = rho2_rho1 ** (gamma / (gamma - 1)) * (p2_p1) ** (-1 / (gamma - 1))
-    print(beta_rad)
+    p02_p01 = rho2_rho1 ** (gamma / (gamma - 1)) * \
+        (p2_p1) ** (-1 / (gamma - 1))
     return M2, np.degrees(beta_rad), p2_p1, p02_p01, rho2_rho1, T2_T1
 
 
@@ -158,12 +158,22 @@ def GetShockCoords(x1, y1, M, theta_deg, wing_m, wing_c, gamma):
     shock = CalcObliqueShock(M, theta_deg, gamma)
 
     if y1 == 0:
-        # Bounce up
-        shock_m = np.tan(np.radians(shock[1]))
-        shock_c = -shock_m * x1
+        if shock[1] > 89.9:
+            # Normal shock
+            x2 = x1
+            y2 = wing_m * x2 + wing_c
+            if x2 > 1:
+                y2 = 10
+        else:
+            # Bounce up
+            shock_m = np.tan(np.radians(shock[1]))
+            shock_c = -shock_m * x1
 
-        x2 = (shock_c - wing_c) / (wing_m - shock_m)
-        y2 = shock_m * x2 + shock_c
+            x2 = (shock_c - wing_c) / (wing_m - shock_m)
+            # If the shock will miss the wing, draw it off the canvas
+            if x2 > 1:
+                x2 = 2
+            y2 = shock_m * x2 + shock_c
     else:
         # Bounce down
         y2 = 0
@@ -173,7 +183,7 @@ def GetShockCoords(x1, y1, M, theta_deg, wing_m, wing_c, gamma):
 
 
 # Draw the plot showing how the wing interacts
-def DrawSupersonicWing(h, alpha, M, gamma):
+def DrawSupersonicWing(M, alpha, h, gamma):
 
     M_inf = M
 
@@ -190,6 +200,8 @@ def DrawSupersonicWing(h, alpha, M, gamma):
 
     pressure_ratio = [(x, y, 1)]
 
+    max_shocks = 20
+    shock_count = 0
     # Loop until flow is no longer supersonic or it has reached the end of the wing
     while M > 1:
         shock = GetShockCoords(x, y, M, alpha, wing_m, wing_c, gamma)
@@ -197,12 +209,13 @@ def DrawSupersonicWing(h, alpha, M, gamma):
         x = shock[0][1]
         y = shock[1][1]
         M = shock[2][0]
-        if y != 0:
-            pressure_ratio.append((x, y, shock[2][2]))
-        else:
-            pressure_ratio.append((-1, -1, shock[2][2]))
-        print(f"Mach Number is now {M}")
+        pressure_ratio.append((x, y, shock[2][2]))
+        # print(f"Mach Number is now {M}")
         if x > 1 and y != 0:
+            break
+        shock_count += 1
+        if shock_count > max_shocks:
+            print("Too many shocks")
             break
 
     # Calculate lift and drag
@@ -212,7 +225,7 @@ def DrawSupersonicWing(h, alpha, M, gamma):
     lift = 0
     drag = 0
     for p in pressure_ratio:
-        if p[0] != -1:
+        if p[1] != 0:
             x = p[0]
             y = p[1]
             if x > 1:
@@ -241,14 +254,17 @@ def DrawSupersonicWing(h, alpha, M, gamma):
     print(
         f"Gound effect increases c_l by factor of {c_l/unbounded[0]:.2f} and c_d by a factor {c_d/unbounded[1]:.2f}"
     )
+    print(f"Final pressure ratio is {current_pressure}")
 
     # Plot formatting
     plt.title(f"Wing section at alpha = {alpha}, M = {M_inf}, and h = {h} c")
     plt.ylabel(r"$\frac{y}{c}$")
     plt.xlabel(r"$\frac{x}{c}$")
-    plt.xlim([-0.5, 1.5])
-    plt.ylim([0, 1.5 * h])
-    # plt.show()
+    # plt.xlim([-0.5, 1.5])
+    # plt.ylim([0, 1.5 * h])
+    plt.xlim([0, 1])
+    plt.ylim([0, 1])
+    plt.show()
 
 
 # Plot altitude vs pressure for Earth and Mars atmospheres
@@ -309,6 +325,6 @@ def AtmosphereZoomedIn():
 
 
 # DesignVehicle()
-# DrawSupersonicWing(0.06, 1.2, 1.6, gamma)
+DrawSupersonicWing(3, 10, 0.02, gamma)
 # Atmosphere()
 # AtmosphereZoomedIn()
