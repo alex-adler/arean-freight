@@ -182,6 +182,55 @@ def GetShockCoords(x1, y1, M, theta_deg, wing_m, wing_c, gamma):
     return ([x1, x2], [y1, y2], shock)
 
 
+def CalcPrandtlMeyer(M, gamma):
+    M2 = M**2
+    return np.sqrt((gamma + 1) / (gamma - 1)) * np.arctan(np.sqrt(((gamma - 1) / (gamma + 1)) * (M2 - 1))) - np.arctan(np.sqrt(M2 - 1))
+
+
+def InvPrandtlMeyer(nu_rad, gamma):
+    nuMax = (np.pi / 2) * (np.sqrt((gamma + 1) / (gamma - 1)) - 1)
+    # Deflection greater than max turning angle
+    if (nu_rad > nuMax):
+        return 0
+
+    mach_max = 18
+    mach_step = .01
+    mach_left = 0
+    nu_left = 0
+    PM_table = []
+
+    # Create the mach - Prandtl Meyer Table
+    mach_array = np.arange(1, mach_max, mach_step)
+    for mach in mach_array:
+        PM_table.append((mach, CalcPrandtlMeyer(mach, gamma)))
+
+    for value in PM_table:
+        if value[1] < nu_rad:
+            mach_left = value[0]
+            nu_left = value[1]
+        else:
+            return np.interp(nu_rad, [nu_left, value[1]], [mach_left, value[0]])
+
+    print("Invalid Prandtl Meyer angle")
+
+
+def CalcExpansion(M1, theta_rad, gamma):
+    nu_M2 = theta_rad + CalcPrandtlMeyer(M1, gamma)
+    M2 = InvPrandtlMeyer(nu_M2, gamma)
+    T2_T1 = 0
+    p2_p1 = 0
+    rho2_rho1 = 0
+    # If the expansion was successful
+    if M2 != 0:
+        numerator = 1 + (gamma - 1) / 2 * M1**2
+        denominator = 1 + (gamma - 1) / 2 * M2**2
+        T2_T1 = numerator / denominator
+        p2_p1 = np.power((numerator / denominator), (gamma / (gamma - 1)))
+        rho2_rho1 = np.power((numerator / denominator), (1 / (gamma - 1)))
+
+    return (M2, T2_T1, p2_p1, rho2_rho1)
+
+
 # Draw the plot showing how the wing interacts
 def DrawSupersonicWing(M, alpha, h, gamma):
 
@@ -241,11 +290,16 @@ def DrawSupersonicWing(M, alpha, h, gamma):
             y_last = y
         current_pressure *= p[2]
 
-    # Upper surface
-    c_p_u = Ackeret(-alpha, M_inf)
+    alpha_rad = np.radians(alpha)
 
-    c_l = lift / (0.5 * gamma * M_inf ** 2) - c_p_u * np.cos(np.radians(alpha))
-    c_d = drag / (0.5 * gamma * M_inf ** 2) - c_p_u * np.sin(np.radians(alpha))
+    # Upper surface
+    expansion = CalcExpansion(M_inf, alpha_rad, gamma)
+    lift -= (1-pressure_ratio[0][0])*expansion[2]
+    drag -= (pressure_ratio[0][1]-h)*expansion[2]
+
+    # Non-dimensionalise
+    c_l = lift / (0.5 * gamma * M_inf**2)
+    c_d = drag / (0.5 * gamma * M_inf**2)
 
     unbounded = SupersonicFlatPlate(alpha, M_inf)
 
@@ -264,7 +318,7 @@ def DrawSupersonicWing(M, alpha, h, gamma):
     # plt.ylim([0, 1.5 * h])
     plt.xlim([0, 1])
     plt.ylim([0, 1])
-    plt.show()
+    # plt.show()
 
 
 # Plot altitude vs pressure for Earth and Mars atmospheres
