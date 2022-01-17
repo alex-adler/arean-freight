@@ -2,7 +2,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import math
-from pyatmos import coesa76
+# from pyatmos import coesa76
 
 # Globals
 g0 = 9.81  # Standard gravity
@@ -242,7 +242,7 @@ def SupersonicFlatPlate(M, alpha_deg, gamma):
 
 
 # Draw the plot showing how the wing interacts
-def DrawSupersonicWing(M, alpha, h, gamma):
+def DrawSupersonicWing(M, alpha, h, gamma, kink_position=0, will_plot=False):
 
     M_inf = M
 
@@ -254,8 +254,11 @@ def DrawSupersonicWing(M, alpha, h, gamma):
     wing_c = wing[1][0] - wing[0][0] * wing_m
     ax.plot(wing[0], wing[1])
 
-    x = wing[0][0]
-    y = wing[1][0]
+    x_LE = wing[0][0]
+    y_LE = wing[1][0]
+
+    x = x_LE
+    y = y_LE
 
     pressure_ratio = [(x, y, 1)]
 
@@ -278,8 +281,8 @@ def DrawSupersonicWing(M, alpha, h, gamma):
             break
 
     # Calculate lift and drag
-    x_last = pressure_ratio[0][0]
-    y_last = pressure_ratio[0][1]
+    x_last = x_LE
+    y_last = y_LE
     current_pressure = 1
     lift = 0
     drag = 0
@@ -293,8 +296,6 @@ def DrawSupersonicWing(M, alpha, h, gamma):
 
             lift += (x - x_last) * current_pressure
             drag += (y_last - y) * current_pressure
-            # print(
-            #     f"Adding {((x-x_last) * current_pressure)/(0.5*gamma*M_inf**2)} of lift coeff")
 
             x_last = x
             y_last = y
@@ -303,8 +304,19 @@ def DrawSupersonicWing(M, alpha, h, gamma):
     alpha_rad = np.radians(alpha)
 
     # Upper surface
-    expansion = CalcExpansion(M_inf, alpha_rad, gamma)
-    lift -= (1-pressure_ratio[0][0])*expansion[2]
+    x_kink = x_LE + kink_position/np.sin(np.pi/2-alpha_rad)
+    kink_deflection = np.arctan((y_LE-h)/(1-x_kink))
+    if kink_position != 0:
+        # Draw -
+        ax.plot([x_LE, x_kink], [y_LE, y_LE])
+        # Draw \
+        ax.plot([x_kink, 1], [y_LE, h])
+
+    # Atmospheric pressure
+    lift -= (x_kink-x_LE)
+
+    expansion = CalcExpansion(M_inf, kink_deflection, gamma)
+    lift -= (1-x_kink)*expansion[2]
     drag -= (pressure_ratio[0][1]-h)*expansion[2]
 
     # Non-dimensionalise
@@ -328,67 +340,70 @@ def DrawSupersonicWing(M, alpha, h, gamma):
     # plt.ylim([0, 1.5 * h])
     plt.xlim([0, 1])
     plt.ylim([0, 1])
-    # plt.show()
+    if will_plot:
+        plt.show()
+
+    return (c_l, c_d)
 
 
 # Plot altitude vs pressure for Earth and Mars atmospheres
-def Atmosphere():
-    # plt.figure(figsize=(4.5, 8))
-    fig, ax = plt.subplots(figsize=(4.5, 8))
+# def Atmosphere():
+#     # plt.figure(figsize=(4.5, 8))
+#     fig, ax = plt.subplots(figsize=(4.5, 8))
 
-    # Earth atmosphere
-    h = np.linspace(0, 100, 100)
-    atmo = coesa76(h)
-    ax.plot(atmo.P / 1000, h, c="royalblue")
-    plt.xlim([0, atmo.P[0] / 1000])
+#     # Earth atmosphere
+#     h = np.linspace(0, 100, 100)
+#     atmo = coesa76(h)
+#     ax.plot(atmo.P / 1000, h, c="royalblue")
+#     plt.xlim([0, atmo.P[0] / 1000])
 
-    # Mars Atmosphere
-    h_mars = np.linspace(0, 100, 100)
-    p_mars = 0.699 * np.exp(-0.00009 * h_mars * 1000)
-    ax.plot(p_mars, h_mars, c="coral")
-    plt.ylim([0, 100])
-    # plt.ylabel("Altitude (km)")
-    # plt.xlabel("Pressure (kPa)")
-    ax.set_xlabel("Pressure (kPa)")
-    ax.set_ylabel("Altitude (km)")
+#     # Mars Atmosphere
+#     h_mars = np.linspace(0, 100, 100)
+#     p_mars = 0.699 * np.exp(-0.00009 * h_mars * 1000)
+#     ax.plot(p_mars, h_mars, c="coral")
+#     plt.ylim([0, 100])
+#     # plt.ylabel("Altitude (km)")
+#     # plt.xlabel("Pressure (kPa)")
+#     ax.set_xlabel("Pressure (kPa)")
+#     ax.set_ylabel("Altitude (km)")
 
-    fig.tight_layout()
-    plt.savefig("./big_atmo.svg", transparent=True, bbox_inches="tight")
+#     fig.tight_layout()
+#     plt.savefig("./big_atmo.svg", transparent=True, bbox_inches="tight")
 
 
-# Plot Mars pressure at Earth equivalent altitude
-def AtmosphereZoomedIn():
-    # Earth atmosphere
-    h = np.linspace(0, 100, 100)
-    atmo = coesa76(h)
+# # Plot Mars pressure at Earth equivalent altitude
+# def AtmosphereZoomedIn():
+#     # Earth atmosphere
+#     h = np.linspace(0, 100, 100)
+#     atmo = coesa76(h)
 
-    # Mars Atmosphere
-    h_mars = np.linspace(0, 100, 100)
-    p_mars = 0.699 * np.exp(-0.00009 * h_mars * 1000)
+#     # Mars Atmosphere
+#     h_mars = np.linspace(0, 100, 100)
+#     p_mars = 0.699 * np.exp(-0.00009 * h_mars * 1000)
 
-    fig, ax1 = plt.subplots(figsize=(4.5, 8))
-    # Earth
-    color = "royalblue"
-    ax1.set_xlabel("Pressure (kPa)")
-    ax1.set_ylabel("Earth Altitude (km)", color=color)
-    ax1.plot(atmo.P / 1000, h, color=color)
-    ax1.tick_params(axis="y", labelcolor=color)
-    ax1.set_ylim([34, 100])
+#     fig, ax1 = plt.subplots(figsize=(4.5, 8))
+#     # Earth
+#     color = "royalblue"
+#     ax1.set_xlabel("Pressure (kPa)")
+#     ax1.set_ylabel("Earth Altitude (km)", color=color)
+#     ax1.plot(atmo.P / 1000, h, color=color)
+#     ax1.tick_params(axis="y", labelcolor=color)
+#     ax1.set_ylim([34, 100])
 
-    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-    # Mars
-    color = "coral"
-    ax2.set_ylabel("Mars Altitude (km)", color=color)
-    ax2.plot(p_mars, h_mars, color=color)
-    ax2.tick_params(axis="y", labelcolor=color)
+#     ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+#     # Mars
+#     color = "coral"
+#     ax2.set_ylabel("Mars Altitude (km)", color=color)
+#     ax2.plot(p_mars, h_mars, color=color)
+#     ax2.tick_params(axis="y", labelcolor=color)
 
-    plt.xlim([0, 0.7])
-    plt.ylim([0, 100])
-    fig.tight_layout()
-    plt.savefig("./small_atmo.svg", transparent=True, bbox_inches="tight")
+#     plt.xlim([0, 0.7])
+#     plt.ylim([0, 100])
+#     fig.tight_layout()
+#     plt.savefig("./small_atmo.svg", transparent=True, bbox_inches="tight")
 
 
 # DesignVehicle()
-DrawSupersonicWing(3, 10, 0.02, gamma)
+DrawSupersonicWing(3, 10, 0.02, gamma, 0.5, False)
 # Atmosphere()
 # AtmosphereZoomedIn()
